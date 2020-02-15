@@ -13,9 +13,9 @@ import (
 	"lukechampine.com/blake3"
 )
 
-func fatalize(err error) {
+func panil(err error) {
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 }
 
@@ -23,7 +23,7 @@ func main() {
 	version := []byte{0}
 
 	db, err := badger.Open(badger.DefaultOptions(".snappy-chandler"))
-	fatalize(err)
+	panil(err)
 	defer db.Close()
 	err = db.Update(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte("version"))
@@ -49,15 +49,15 @@ func main() {
 			return nil
 		})
 	})
-	fatalize(err)
+	panil(err)
 
 	data := []byte("we out here!")
 	superhash, err := insert(db, bytes.NewReader(data))
-	fatalize(err)
+	panil(err)
 	reader, err := retrieve(db, superhash)
-	fatalize(err)
+	panil(err)
 	redata, err := ioutil.ReadAll(reader)
-	fatalize(err)
+	panil(err)
 	fmt.Println(string(data), string(redata))
 }
 
