@@ -86,10 +86,10 @@ func insert(db *badger.DB, r io.Reader) ([32]byte, error) {
 			// TODO: commit after every chunk for memory savings?
 			copy(data, chunk.Data)
 			hash := blake3.Sum256(chunk.Data)
+			hashes = append(hashes, hash[:]...)
 
 			_, err = txn.Get(append([]byte("chunk/"), hash[:]...))
 			if err == nil { // chunk exists
-				hashes = append(hashes, hash[:]...)
 				continue
 			}
 			if err != badger.ErrKeyNotFound {
