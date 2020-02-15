@@ -1,10 +1,13 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
 
 	"github.com/dgraph-io/badger"
+	"github.com/lukechampine/blake3"
+	"github.com/restic/chunker"
 )
 
 func main() {
@@ -18,8 +21,15 @@ func main() {
 	err = db.Update(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte("version"))
 		if err != nil {
-			log.Println("version key not found, assuming fresh db and writing our own version number")
+			log.Println("version key not found, assuming fresh db and writing initial data")
 			txn.Set([]byte("version"), []byte{0})
+			poly, err := chunker.RandomPolynomial()
+			if err != nil {
+				return err
+			}
+			b := make([]byte, 8)
+			binary.LittleEndian.PutUint64(b, uint64(poly))
+			txn.Set([]byte("polynomial"), b)
 			return nil
 		}
 		return item.Value(func(val []byte) error {
