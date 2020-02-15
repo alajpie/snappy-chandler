@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 
 	"github.com/dgraph-io/badger"
@@ -48,6 +50,15 @@ func main() {
 		})
 	})
 	fatalize(err)
+
+	data := []byte("we out here!")
+	superhash, err := insert(db, bytes.NewReader(data))
+	fatalize(err)
+	reader, err := retrieve(db, superhash)
+	fatalize(err)
+	redata, err := ioutil.ReadAll(reader)
+	fatalize(err)
+	fmt.Println(string(data), string(redata))
 }
 
 func insert(db *badger.DB, r io.Reader) ([32]byte, error) {
@@ -74,7 +85,7 @@ func insert(db *badger.DB, r io.Reader) ([32]byte, error) {
 		for {
 			chunk, err := ch.Next(buf)
 			if err == io.EOF {
-				return nil
+				break
 			}
 			if err != nil {
 				return err
@@ -110,4 +121,50 @@ func insert(db *badger.DB, r io.Reader) ([32]byte, error) {
 	}
 
 	return superhash, nil
+}
+
+type retRdr struct {
+	db     *badger.DB
+	hashes []byte
+	offset int
+}
+
+func (r *retRdr) Read(p []byte) (int, error) {
+	if len(r.hashes) == 0 {
+		return 0, io.EOF
+	}
+	hash := r.hashes[:32]
+	var n, l int
+	err := r.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(append([]byte("chunk/"), hash[:]...))
+		if err != nil {
+			return err
+		}
+		return item.Value(func(val []byte) error {
+			l = len(val) - r.offset
+			n = copy(p, val[r.offset:])
+			return nil
+		})
+	})
+	if n != l {
+		r.offset = n
+	} else {
+		r.hashes = r.hashes[32:]
+	}
+
+	return n, err
+}
+
+func retrieve(db *badger.DB, superhash [32]byte) (io.Reader, error) {
+	r := &retRdr{db: db}
+	err := db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(append([]byte("blob/"), superhash[:]...))
+		if err != nil {
+			return err
+		}
+		hashes, err := item.ValueCopy(nil)
+		r.hashes = hashes
+		return err
+	})
+	return r, err
 }
